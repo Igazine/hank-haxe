@@ -85,7 +85,7 @@ class ValueTools {
 
     public static function toString(v:Value):String {
         return switch (v) {
-            case VVoid: "null";
+            case VVoid: "Void";
             case VNumber(n): 
                 var s = Std.string(n);
                 if (StringTools.endsWith(s, ".0")) s = s.substring(0, s.length - 2);
