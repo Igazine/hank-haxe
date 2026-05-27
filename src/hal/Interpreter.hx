@@ -45,7 +45,7 @@ class Interpreter implements ExecutionContext {
                 switch (evalInScope(valExpr, scope)) {
                     case Value(v):
                         scope.set(name, v);
-                        Value(VVoid);
+                        Value(v);
                     case other: other;
                 }
             case EBlock(stmts, _):
