@@ -66,6 +66,27 @@ class StdLib {
             };
         };
 
+        var halEquals:Value->Value->Bool = null;
+        halEquals = function(a:Value, b:Value):Bool {
+            return switch [a, b] {
+                case [VVoid, VVoid]: true;
+                case [VNumber(n1), VNumber(n2)]: n1 == n2;
+                case [VString(s1), VString(s2)]: s1 == s2;
+                case [VArray(a1), VArray(a2)]:
+                    if (a1.length != a2.length) return false;
+                    for (i in 0...a1.length) if (!halEquals(a1[i], a2[i])) return false;
+                    true;
+                case [VObject(o1), VObject(o2)]:
+                    var k1 = [for (k in o1.keys()) k];
+                    var k2 = [for (k in o2.keys()) k];
+                    if (k1.length != k2.length) return false;
+                    for (k in k1) if (!o2.exists(k) || !halEquals(o1.get(k), o2.get(k))) return false;
+                    true;
+                case [VOpaque(l1, d1), VOpaque(l2, d2)]: l1 == l2 && d1 == d2;
+                default: false;
+            };
+        };
+
         var mods = new Map<String, Map<String, Array<Value>->ExecutionContext->Value>>();
 
         mods.set("log", [
@@ -136,7 +157,7 @@ class StdLib {
                 var b = 0.0; switch (args[1]) { case VNumber(n): b = n; default: }
                 if (a < b) VNumber(1.0) else VVoid;
             },
-            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (valToString(args[0]) == valToString(args[1]) ? VNumber(1.0) : VVoid)
+            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (halEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
         ]);
 
         mods.set("logic", [
@@ -149,7 +170,8 @@ class StdLib {
             "or" => (args, ctx) -> {
                 for (a in args) if (a != VVoid) return a;
                 VVoid;
-            }
+            },
+            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (halEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
         ]);
 
         mods.set("arr", [
