@@ -4,7 +4,7 @@
   "license": "MIT",
   "tags": ["automation", "interpreter", "scripting"],
   "description": "Haxe implementation of the Hybrid Automation Language (HAL)",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "classPath": "src",
   "releasenote": "Opaque refactor and multi-repo extraction",
   "contributors": ["Igazine"],
