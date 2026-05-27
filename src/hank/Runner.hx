@@ -1,9 +1,9 @@
-package hal;
+package hank;
 
-import hal.Types;
-import hal.Lexer;
-import hal.Parser;
-import hal.Interpreter;
+import hank.Types;
+import hank.Lexer;
+import hank.Parser;
+import hank.Interpreter;
 
 /**
  * A base class for HAL Host Runners in Haxe.

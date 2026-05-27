@@ -1,4 +1,4 @@
-package hal;
+package hank;
 
 enum ValueType {
     TypeVoid;

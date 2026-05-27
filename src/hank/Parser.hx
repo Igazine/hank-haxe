@@ -1,7 +1,7 @@
-package hal;
+package hank;
 
-import hal.Types;
-import hal.Lexer;
+import hank.Types;
+import hank.Lexer;
 import haxe.io.Path;
 
 class Parser {

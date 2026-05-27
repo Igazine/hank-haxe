@@ -1,6 +1,6 @@
-package hal;
+package hank;
 
-import hal.Types;
+import hank.Types;
 
 enum TokenType {
     Identifier;
