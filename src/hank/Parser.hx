@@ -20,25 +20,33 @@ class Parser {
         skipNewlines();
         var stmts:Array<Expr> = [];
 
-        while (!isEof()) {
-            skipNewlines();
-            if (isEof()) break;
-
-            if (peek().type == LParen && isFuncDefStart()) {
-                var func = parseFuncDef();
-                if (stmts.length == 0) {
-                    skipNewlines();
-                    if (isEof()) return func;
-                }
-                stmts.push(func);
-            } else {
-                stmts.push(parseStatement());
-            }
+        // 1. Consume Macro Includes
+        while (!isEof() && peek().type == At) {
+            stmts.push(parseInclude());
             skipNewlines();
         }
 
+        if (isEof()) throw error("Syntax Error: Script is empty.");
+
+        // 2. Parse exactly ONE TaskDef (FuncDef or Block)
+        var mainTask:Expr = null;
+        if (peek().type == LParen && isFuncDefStart()) {
+            mainTask = parseFuncDef();
+        } else if (peek().type == LBrace) {
+            mainTask = parseBlock();
+        } else {
+            throw error("Syntax Error: Expected main task definition (a closure or a block).");
+        }
+        stmts.push(mainTask);
+
+        // 3. Assert EOF
+        skipNewlines();
+        if (!isEof()) {
+            throw error("Syntax Error: Unexpected code outside of main task. A Hank script must contain exactly one Task definition.");
+        }
+
         if (stmts.length == 1) return stmts[0];
-        return EBlock(stmts, stmts.length > 0 ? ExprTools.getTd(stmts[0]) : td());
+        return EBlock(stmts, ExprTools.getTd(stmts[0]));
     }
 
     function parseStatement():Expr {
