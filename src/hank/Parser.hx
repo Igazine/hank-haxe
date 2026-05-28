@@ -322,10 +322,10 @@ class Parser {
         }
 
         var content = macroMap.get(rawPath);
+        if (content == null) {
             throw error('Macro resource not found: @$rawPath');
         }
 
-        var content = macroMap.get(rawPath);
         var taskName = haxe.io.Path.withoutExtension(haxe.io.Path.withoutDirectory(rawPath));
 
         var lexer = new Lexer(content);
