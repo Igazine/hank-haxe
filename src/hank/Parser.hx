@@ -1,19 +1,18 @@
 package hank;
 
-import hank.Types;
 import hank.Lexer;
-import haxe.io.Path;
+import hank.Types;
 
 class Parser {
     var tokens:Array<Token>;
     var pos:Int = 0;
     var filename:String;
-    var macroMap:Map<String, String>;
+    var macroResolver:(String)->Expr;
 
-    public function new(tokens:Array<Token>, filename:String, macroMap:Map<String, String>) {
+    public function new(tokens:Array<Token>, filename:String, macroResolver:(String)->Expr) {
         this.tokens = tokens;
         this.filename = filename;
-        this.macroMap = macroMap;
+        this.macroResolver = macroResolver;
     }
 
     public function parse():Expr {
@@ -321,16 +320,8 @@ class Parser {
             throw error("Syntax Error: The '@' macro strictly requires a string literal path (e.g., @ \"utils\"). Identifier shorthand is not allowed.");
         }
 
-        var content = macroMap.get(rawPath);
-        if (content == null) {
-            throw error('Macro resource not found: @$rawPath');
-        }
-
+        var taskAst = macroResolver(rawPath);
         var taskName = haxe.io.Path.withoutExtension(haxe.io.Path.withoutDirectory(rawPath));
-
-        var lexer = new Lexer(content);
-        var subParser = new Parser(lexer.tokenize(), rawPath, macroMap);
-        var taskAst = subParser.parse();
 
         return EAssign(taskName, taskAst, tdRoot);
     }

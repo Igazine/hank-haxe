@@ -1,7 +1,5 @@
 package hank;
 
-import hank.Types;
-
 enum TokenType {
     Identifier;
     Number;

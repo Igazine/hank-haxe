@@ -1,41 +1,25 @@
 package hank;
 
-import hank.Types;
+import hank.Interpreter;
 import hank.Lexer;
 import hank.Parser;
-import hank.Interpreter;
+import hank.Types;
 
 /**
- * A base class for Hank Host Runners in Haxe.
- * Handles script loading, macro resolution, and AST caching.
- * Environment-agnostic: must be extended to provide I/O.
+ * A Hank Host Runner.
+ * Handles resource orchestration, macro resolution, and AST caching.
+ * Platform-agnostic: uses the Resource model for all content retrieval.
  */
 class Runner {
-    var pathCache:Map<String, String> = new Map();
-    var astCache:Map<String, Expr> = new Map();
-    var macroMap:Map<String, String> = new Map();
+    var resourceCache:Map<String, Resource> = new Map();
     public var coreScope:Scope = new HankScope();
 
     public function new() {}
 
     /**
-     * Reads a file from the host environment.
-     */
-    public function readFile(path:String):String {
-        throw "Not implemented: readFile";
-    }
-
-    /**
-     * Resolves a macro path relative to the current file.
-     */
-    public function resolvePath(macroPath:String, baseFile:String):String {
-        throw "Not implemented: resolvePath";
-    }
-
-    /**
      * Registers a set of native tasks under a module name.
      */
-    public function registerModule(name:String, tasks:Map<String, Array<Value>->ExecutionContext->Value>) {
+    final public function registerModule(name:String, tasks:Map<String, (Array<Value>, ExecutionContext)->Value>) {
         var moduleObj = new Map<String, Value>();
         for (tName => func in tasks) {
             moduleObj.set(tName, VTask({
@@ -48,41 +32,53 @@ class Runner {
     }
 
     /**
-     * Pre-loads and caches a script for execution.
+     * Pre-loads and caches a resource for execution.
      */
-    public function load(scriptPath:String):String {
-        var absPath = resolvePath(scriptPath, "");
-        if (astCache.exists(absPath)) return absPath;
+    final public function load(resource:Resource, ?stack:Array<String>):Expr {
+        if (stack == null) stack = [];
 
-        preprocess(absPath, []);
-
-        var content = pathCache.get(absPath);
-        if (content == null) throw 'File not loaded: $absPath';
-
-        var lexer = new Lexer(content);
-        var parser = new Parser(lexer.tokenize(), absPath, macroMap);
-        var ast = parser.parse();
+        // Check cache using resource ID
+        var cached = resourceCache.get(resource.id);
+        if (cached != null && cached.ast != null) return cached.ast;
         
-        astCache.set(absPath, ast);
-        return absPath;
+        // Circular Dependency Check
+        if (stack.indexOf(resource.id) != -1) throw 'Circular Dependency: ${resource.id}';
+        
+        // Ensure we are working with the cached instance if it exists, otherwise cache this one
+        if (cached == null) {
+            resourceCache.set(resource.id, resource);
+            cached = resource;
+        }
+
+        cached.load();
+        if (cached.content == null) throw 'Resource content not loaded: ${cached.id}';
+
+        var newStack = stack.copy();
+        newStack.push(cached.id);
+
+        var lexer = new Lexer(cached.content);
+        var parser = new Parser(lexer.tokenize(), cached.id, function(macroPath) {
+            var mRes = cached.resolve(macroPath);
+            return load(mRes, newStack);
+        });
+        
+        cached.ast = parser.parse();
+        return cached.ast;
     }
 
     /**
-     * Removes a script from the cache.
+     * Removes a resource and its AST from the cache.
      */
-    public function unload(scriptPath:String) {
-        var absPath = resolvePath(scriptPath, "");
-        astCache.remove(absPath);
-        pathCache.remove(absPath);
+    public function unload(resource:Resource) {
+        resourceCache.remove(resource.id);
     }
 
     /**
-     * Executes a Hank script.
+     * Executes a Hank Resource.
      */
-    public function run(scriptPath:String, ?args:Array<Value>):Value {
+    public function run(resource:Resource, ?args:Array<Value>):Value {
         if (args == null) args = [];
-        var absPath = load(scriptPath);
-        var ast = astCache.get(absPath);
+        var ast = load(resource);
 
         var interpreter = new Interpreter(null, coreScope);
         var scriptTask = interpreter.run(ast);
@@ -91,42 +87,5 @@ class Runner {
             case VTask(_): interpreter.call(scriptTask, args);
             default: throw "Hank Error: Script must evaluate to a Task definition.";
         }
-    }
-
-    function preprocess(path:String, stack:Array<String>) {
-        for (s in stack) if (s == path) throw 'Circular Dependency: $path';
-        if (pathCache.exists(path)) return;
-
-        var content = readFile(path);
-        pathCache.set(path, content);
-        
-        var newStack = stack.copy();
-        newStack.push(path);
-        
-        var macros = scanMacros(content);
-        for (m in macros) {
-            var mPath = resolvePath(m, path);
-            preprocess(mPath, newStack);
-            macroMap.set(m, pathCache.get(mPath));
-        }
-    }
-
-    function scanMacros(content:String):Array<String> {
-        var lexer = new Lexer(content);
-        var tokens = lexer.tokenize();
-        var macros = [];
-        var i = 0;
-        while (i < tokens.length - 1) {
-            if (tokens[i].type == At) {
-                var next = tokens[i+1];
-                switch (next.type) {
-                    case String | Identifier:
-                        macros.push(next.literal);
-                    default:
-                }
-            }
-            i++;
-        }
-        return macros;
     }
 }
