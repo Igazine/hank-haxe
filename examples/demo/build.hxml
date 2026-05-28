@@ -1,4 +1,4 @@
 -cp src
 -main Main
--L hal-haxe
+-L hank
 -neko demo.n

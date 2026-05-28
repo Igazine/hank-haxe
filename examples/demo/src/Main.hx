@@ -7,24 +7,6 @@ import sys.FileSystem;
 import sys.io.File;
 import sys.io.Process;
 
-class DemoRunner extends Runner {
-    override function readFile(path:String):String {
-        return File.getContent(path);
-    }
-
-    override function resolvePath(macroPath:String, baseFile:String):String {
-        if (Path.isAbsolute(macroPath)) return macroPath;
-        
-        var baseDir = (baseFile == "" || baseFile == null) ? Sys.getCwd() : Path.directory(baseFile);
-        var joined = Path.join([baseDir, macroPath]);
-        
-        if (Path.extension(joined) == "") {
-            if (FileSystem.exists(joined + ".hank")) return Path.normalize(joined + ".hank");
-        }
-        return Path.normalize(joined);
-    }
-}
-
 class Main {
     static function main() {
         var args = Sys.args();
@@ -42,14 +24,16 @@ class Main {
         }
 
         var runner = createRunner();
+        var scriptPath = Path.isAbsolute(args[0]) ? args[0] : Path.join([current, args[0]]);
+        var resource = FileResource.create(Path.normalize(scriptPath));
+
         var hankArgs:Array<Value> = [];
-        for (i in 0...args.length) {
-            if (i == 0) continue; // First arg is the script path
+        for (i in 1...args.length) {
             hankArgs.push(VString(args[i]));
         }
 
         try {
-            var res = runner.run(args[0], hankArgs);
+            var res = runner.run(resource, hankArgs);
             switch (res) {
                 case VNumber(n): Sys.exit(Std.int(n));
                 default: Sys.exit(0);
@@ -61,7 +45,7 @@ class Main {
     }
 
     static function createRunner():Runner {
-        var runner = new DemoRunner();
+        var runner = new Runner();
 
         // 1. Register StdLib
         var std = StdLib.getModules();
@@ -198,13 +182,14 @@ class Main {
         for (t in tests) {
             Sys.println('--- Running: $t ---');
             var runner = createRunner();
-            var path = Path.join([workspaceRoot, t]);
+            var path = Path.normalize(Path.join([workspaceRoot, t]));
+            var resource = FileResource.create(path);
             var args:Array<Value> = [];
             if (StringTools.endsWith(t, "08_host_args.hank")) {
                 args.push(VString("Tamas"));
             }
             try {
-                runner.run(path, args);
+                runner.run(resource, args);
             } catch (e:Dynamic) {
                 Sys.println('Test Failed: $e');
             }
