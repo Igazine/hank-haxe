@@ -226,7 +226,15 @@ class Interpreter implements ExecutionContext {
     }
 
     public function call(task:Value, args:Array<Value>):Value {
-        return switch (callInternal(task, args, globalScope)) {
+        var finalArgs = args;
+        switch (task) {
+            case VTask(t) if (!t.isNative && t.params != null):
+                if (args.length > t.params.length) {
+                    finalArgs = args.slice(0, t.params.length);
+                }
+            default:
+        }
+        return switch (callInternal(task, finalArgs, globalScope)) {
             case Value(v) | Return(v): v;
             case Error(msg): throw msg;
         }
