@@ -17,7 +17,7 @@ class Interpreter implements ExecutionContext {
 
     public function new(?parentScope:Scope, coreScope:Scope) {
         this.coreScope = coreScope;
-        this.globalScope = new HALScope(parentScope != null ? parentScope : coreScope);
+        this.globalScope = new HankScope(parentScope != null ? parentScope : coreScope);
     }
 
     public function run(ast:Expr):Value {
@@ -180,7 +180,7 @@ class Interpreter implements ExecutionContext {
                         switch (res) {
                             case Error(errMsg):
                                 if (rescue != null) {
-                                    var rescueScope = new HALScope(scope);
+                                    var rescueScope = new HankScope(scope);
                                     if (catchVar != null) rescueScope.set(catchVar, VString(errMsg));
                                     evalInScope(rescue, rescueScope);
                                 } else res;
@@ -199,7 +199,7 @@ class Interpreter implements ExecutionContext {
                 } else {
                     if (args.length > t.params.length) return Error("Too many arguments");
                     
-                    var taskScope = new HALScope(t.closure);
+                    var taskScope = new HankScope(t.closure);
                     for (i in 0...t.params.length) {
                         var p = t.params[i];
                         var val:Value = VVoid;
@@ -248,7 +248,7 @@ class Interpreter implements ExecutionContext {
     }
 }
 
-class HALScope implements Scope {
+class HankScope implements Scope {
     var values:Map<String, Value> = new Map();
     var parent:Scope;
 

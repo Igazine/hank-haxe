@@ -66,8 +66,8 @@ enum Expr {
     EFlowControl(condition:Expr, success:Expr, ?fallback:Expr, ?rescue:Expr, ?catchVar:String, td:TokenData);
 }
 
-interface IHALSerializable {
-    function serializeHAL():String;
+interface IHankSerializable {
+    function serializeHank():String;
 }
 
 class ValueTools {

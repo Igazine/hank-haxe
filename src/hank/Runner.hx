@@ -6,7 +6,7 @@ import hank.Parser;
 import hank.Interpreter;
 
 /**
- * A base class for HAL Host Runners in Haxe.
+ * A base class for Hank Host Runners in Haxe.
  * Handles script loading, macro resolution, and AST caching.
  * Environment-agnostic: must be extended to provide I/O.
  */
@@ -14,7 +14,7 @@ class Runner {
     var pathCache:Map<String, String> = new Map();
     var astCache:Map<String, Expr> = new Map();
     var macroMap:Map<String, String> = new Map();
-    public var coreScope:Scope = new HALScope();
+    public var coreScope:Scope = new HankScope();
 
     public function new() {}
 
@@ -77,7 +77,7 @@ class Runner {
     }
 
     /**
-     * Executes a HAL script.
+     * Executes a Hank script.
      */
     public function run(scriptPath:String, ?args:Array<Value>):Value {
         if (args == null) args = [];
@@ -89,7 +89,7 @@ class Runner {
 
         return switch (scriptTask) {
             case VTask(_): interpreter.call(scriptTask, args);
-            default: throw "HAL Error: Script must evaluate to a Task definition.";
+            default: throw "Hank Error: Script must evaluate to a Task definition.";
         }
     }
 
