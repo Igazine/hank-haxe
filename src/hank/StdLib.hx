@@ -11,8 +11,8 @@ class StdLib {
     public static function getModules():Map<String, Map<String, Array<Value>->ExecutionContext->Value>> {
         var valToString = (v:Value) -> ValueTools.toString(v);
 
-        var mapAnyToHal:Dynamic->Value = null;
-        mapAnyToHal = function(v:Dynamic):Value {
+        var mapAnyToHank:Dynamic->Value = null;
+        mapAnyToHank = function(v:Dynamic):Value {
             if (v == null) return VVoid;
             if (Std.isOfType(v, Float)) return VNumber(cast v);
             if (Std.isOfType(v, Int)) return VNumber(cast v);
@@ -20,28 +20,28 @@ class StdLib {
             if (Std.isOfType(v, Bool)) return (v:Bool) ? VNumber(1.0) : VVoid;
             if (Std.isOfType(v, Array)) {
                 var arr:Array<Dynamic> = cast v;
-                return VArray(arr.map(mapAnyToHal));
+                return VArray(arr.map(mapAnyToHank));
             }
             if (Reflect.isObject(v)) {
                 var map = new Map<String, Value>();
                 for (f in Reflect.fields(v)) {
-                    map.set(f, mapAnyToHal(Reflect.field(v, f)));
+                    map.set(f, mapAnyToHank(Reflect.field(v, f)));
                 }
                 return VObject(map);
             }
             return VVoid;
         };
 
-        var mapHalToAny:Value->Dynamic = null;
-        mapHalToAny = function(v:Value):Dynamic {
+        var mapHankToAny:Value->Dynamic = null;
+        mapHankToAny = function(v:Value):Dynamic {
             return switch (v) {
                 case VNumber(n): n;
                 case VString(s): s;
-                case VArray(a): a.map(mapHalToAny);
+                case VArray(a): a.map(mapHankToAny);
                 case VObject(m):
                     var obj = {};
                     for (k => val in m) {
-                        var any = mapHalToAny(val);
+                        var any = mapHankToAny(val);
                         if (any != null) Reflect.setField(obj, k, any);
                     }
                     obj;
@@ -66,21 +66,21 @@ class StdLib {
             };
         };
 
-        var halEquals:Value->Value->Bool = null;
-        halEquals = function(a:Value, b:Value):Bool {
+        var hankEquals:Value->Value->Bool = null;
+        hankEquals = function(a:Value, b:Value):Bool {
             return switch [a, b] {
                 case [VVoid, VVoid]: true;
                 case [VNumber(n1), VNumber(n2)]: n1 == n2;
                 case [VString(s1), VString(s2)]: s1 == s2;
                 case [VArray(a1), VArray(a2)]:
                     if (a1.length != a2.length) return false;
-                    for (i in 0...a1.length) if (!halEquals(a1[i], a2[i])) return false;
+                    for (i in 0...a1.length) if (!hankEquals(a1[i], a2[i])) return false;
                     true;
                 case [VObject(o1), VObject(o2)]:
                     var k1 = [for (k in o1.keys()) k];
                     var k2 = [for (k in o2.keys()) k];
                     if (k1.length != k2.length) return false;
-                    for (k in k1) if (!o2.exists(k) || !halEquals(o1.get(k), o2.get(k))) return false;
+                    for (k in k1) if (!o2.exists(k) || !hankEquals(o1.get(k), o2.get(k))) return false;
                     true;
                 case [VOpaque(l1, d1), VOpaque(l2, d2)]: l1 == l2 && d1 == d2;
                 default: false;
@@ -129,6 +129,84 @@ class StdLib {
             "trim" => (args, ctx) -> args.length == 0 ? VVoid : VString(StringTools.trim(valToString(args[0])))
         ]);
 
+        mods.set("num", [
+            "parse" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                var s = valToString(args[0]);
+                var base = 0;
+                if (args.length > 1) switch (args[1]) { case VNumber(n): base = Std.int(n); default: }
+                
+                if (base == 0) {
+                    if (StringTools.startsWith(s, "0x")) base = 16;
+                    else if (StringTools.startsWith(s, "0b")) base = 2;
+                    else if (StringTools.startsWith(s, "0o")) base = 8;
+                    else base = 10;
+                }
+
+                if (base == 16 || base == 10 || base == 8 || base == 2) {
+                    var n = Std.parseInt(s);
+                    return n == null ? VVoid : VNumber(n);
+                }
+
+                // Custom base (up to 36)
+                var chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+                var res = 0.0;
+                s = s.toLowerCase();
+                for (i in 0...s.length) {
+                    var idx = chars.indexOf(s.charAt(i));
+                    if (idx == -1 || idx >= base) return VVoid;
+                    res = res * base + idx;
+                }
+                VNumber(res);
+            },
+            "format" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                var n = 0; switch (args[0]) { case VNumber(val): n = Std.int(val); default: return VVoid; }
+                var base = 10; if (args.length > 1) switch (args[1]) { case VNumber(val): base = Std.int(val); default: }
+                if (base < 2 || base > 36) return VVoid;
+
+                var chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+                if (n == 0) return VString("0");
+                var res = "";
+                var isNeg = n < 0;
+                if (isNeg) n = -n;
+                while (n > 0) {
+                    res = chars.charAt(n % base) + res;
+                    n = Std.int(n / base);
+                }
+                VString((isNeg ? "-" : "") + res);
+            },
+            "bitAnd" => (args, ctx) -> {
+                var a = 0; switch (args[0]) { case VNumber(n): a = Std.int(n); default: }
+                var b = 0; switch (args[1]) { case VNumber(n): b = Std.int(n); default: }
+                VNumber(a & b);
+            },
+            "bitOr" => (args, ctx) -> {
+                var a = 0; switch (args[0]) { case VNumber(n): a = Std.int(n); default: }
+                var b = 0; switch (args[1]) { case VNumber(n): b = Std.int(n); default: }
+                VNumber(a | b);
+            },
+            "bitXor" => (args, ctx) -> {
+                var a = 0; switch (args[0]) { case VNumber(n): a = Std.int(n); default: }
+                var b = 0; switch (args[1]) { case VNumber(n): b = Std.int(n); default: }
+                VNumber(a ^ b);
+            },
+            "bitNot" => (args, ctx) -> {
+                var a = 0; switch (args[0]) { case VNumber(n): a = Std.int(n); default: }
+                VNumber(~a);
+            },
+            "shiftL" => (args, ctx) -> {
+                var a = 0; switch (args[0]) { case VNumber(n): a = Std.int(n); default: }
+                var b = 0; switch (args[1]) { case VNumber(n): b = Std.int(n); default: }
+                VNumber(a << b);
+            },
+            "shiftR" => (args, ctx) -> {
+                var a = 0; switch (args[0]) { case VNumber(n): a = Std.int(n); default: }
+                var b = 0; switch (args[1]) { case VNumber(n): b = Std.int(n); default: }
+                VNumber(a >> b);
+            }
+        ]);
+
         mods.set("math", [
             "add" => (args, ctx) -> {
                 var sum = 0.0;
@@ -161,7 +239,7 @@ class StdLib {
                 var b = 0.0; switch (args[1]) { case VNumber(n): b = n; default: }
                 if (a < b) VNumber(1.0) else VVoid;
             },
-            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (halEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
+            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (hankEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
         ]);
 
         mods.set("logic", [
@@ -175,7 +253,7 @@ class StdLib {
                 for (a in args) if (a != VVoid) return a;
                 VVoid;
             },
-            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (halEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
+            "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (hankEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
         ]);
 
         mods.set("arr", [
@@ -217,13 +295,6 @@ class StdLib {
                     for (k in m.keys()) keys.push(VString(k));
                     VArray(keys);
                 default: VVoid;
-            },
-            "values" => (args, ctx) -> switch (args[0]) {
-                case VObject(m):
-                    var vals = [];
-                    for (v in m) vals.push(v);
-                    VArray(vals);
-                default: VVoid;
             }
         ]);
 
@@ -231,14 +302,14 @@ class StdLib {
             "parse" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
                 try {
-                    return mapAnyToHal(Json.parse(valToString(args[0])));
+                    return mapAnyToHank(Json.parse(valToString(args[0])));
                 } catch (e:Dynamic) return VVoid;
             },
             "stringify" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
                 if (checkOpaque(args[0])) return VVoid;
                 try {
-                    return VString(Json.stringify(mapHalToAny(args[0])));
+                    return VString(Json.stringify(mapHankToAny(args[0])));
                 } catch (e:Dynamic) return VVoid;
             }
         ]);
