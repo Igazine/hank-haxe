@@ -314,14 +314,14 @@ class Parser {
     function parseInclude():Expr {
         var t = consume(At);
         var tdRoot = { line: t.line, lineText: t.lineText };
-        var rawPath:String = "";
+        var rawPath = '';
         if (peek().type == String) {
             rawPath = consume(String).literal;
         } else {
-            rawPath = consumeIdentifier();
+            throw error("Syntax Error: The '@' macro strictly requires a string literal path (e.g., @ \"utils\"). Identifier shorthand is not allowed.");
         }
 
-        if (!macroMap.exists(rawPath)) {
+        var content = macroMap.get(rawPath);
             throw error('Macro resource not found: @$rawPath');
         }
 
