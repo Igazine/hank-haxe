@@ -1,4 +1,4 @@
 [submodule "vendor/hank"]
 	path = vendor/hank
 	url = https://github.com/Igazine/hank.git
-	branch = opaque-refactor
+	branch = main
