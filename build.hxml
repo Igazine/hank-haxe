@@ -1,2 +1,3 @@
 # Placeholder file for language server
 -L hank
+-cp examples/demo/src
