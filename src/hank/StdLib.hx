@@ -110,6 +110,22 @@ class StdLib implements IExtension {
             "signal" => (args, ctx) -> {
                 if (args.length > 0) Sys.println('[SIGNAL] ' + valToString(args[0]));
                 VVoid;
+            },
+            "while" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                var cond = args[0];
+                var body = args[1];
+                var res:Value = VVoid;
+                while (true) {
+                    var condVal = ctx.call(cond, []);
+                    var truthy = switch (condVal) {
+                        case VVoid: false;
+                        default: true;
+                    }
+                    if (!truthy) break;
+                    res = ctx.call(body, []);
+                }
+                res;
             }
         ]);
 

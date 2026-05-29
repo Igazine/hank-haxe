@@ -83,6 +83,7 @@ class Main {
             "test/conformance/15_logic_eq.hank",
             "test/conformance/16_chained_assign.hank",
             "test/conformance/17_num_module.hank",
+            "test/conformance/18_runtime_module.hank",
         ];
 
         for (t in tests) {
