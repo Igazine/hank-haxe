@@ -42,7 +42,7 @@ class Runner {
         if (cached != null && cached.ast != null) return cached.ast;
         
         // Circular Dependency Check
-        if (stack.indexOf(resource.id) != -1) throw 'Circular Dependency: ${resource.id}';
+        if (stack.indexOf(resource.id) != -1) throw HankErrorRegistry.create(CircularDependency, [resource.id]);
         
         // Ensure we are working with the cached instance if it exists, otherwise cache this one
         if (cached == null) {
@@ -51,7 +51,7 @@ class Runner {
         }
 
         cached.load();
-        if (cached.content == null) throw 'Resource content not loaded: ${cached.id}';
+        if (cached.content == null) throw HankErrorRegistry.create(ResourceContentNotLoaded, [cached.id]);
 
         var newStack = stack.copy();
         newStack.push(cached.id);
@@ -85,7 +85,7 @@ class Runner {
 
         return switch (scriptTask) {
             case VTask(_): interpreter.call(scriptTask, args);
-            default: throw "Hank Error: Script must evaluate to a Task definition.";
+            default: throw HankErrorRegistry.create(ScriptMustBeTask);
         }
     }
 }

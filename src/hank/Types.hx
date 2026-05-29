@@ -106,3 +106,79 @@ class ExprTools {
         }
     }
 }
+
+enum abstract HankError(Int) to Int from Int {
+    // Lexical Errors (10xx)
+    var UnexpectedCharacter = 1001;
+    var UnclosedStringLiteral = 1002;
+
+    // Syntax Errors (20xx)
+    var EmptyScript = 2001;
+    var ExpectedMainTask = 2002;
+    var UnexpectedCodeOutsideMainTask = 2003;
+    var InvalidAssignmentTarget = 2004;
+    var UnexpectedToken = 2005;
+    var MacroRequiresString = 2006;
+    var ExpectedIdentifier = 2007;
+
+    // Resolution & Runner Errors (30xx)
+    var CircularDependency = 3001;
+    var ResourceContentNotLoaded = 3002;
+    var ScriptMustBeTask = 3003;
+    var MacroResourceNotFound = 3004;
+
+    // Runtime Errors (40xx)
+    var TargetNotFunction = 4001;
+    var TooManyArguments = 4002;
+    var MissingRequiredParameter = 4003;
+    var Halt = 4004;
+    var GenericRuntimeError = 4005;
+}
+
+typedef HankErrorValue = {
+    var code:HankError;
+    var message:String;
+}
+
+class HankErrorRegistry {
+    public static var messages:Map<HankError, String> = [
+        UnexpectedCharacter => "Unexpected character: {0}",
+        UnclosedStringLiteral => "Unclosed string literal",
+        
+        EmptyScript => "Syntax Error: Script is empty.",
+        ExpectedMainTask => "Syntax Error: Expected main task definition (a closure or a block).",
+        UnexpectedCodeOutsideMainTask => "Syntax Error: Unexpected code outside of main task. A Hank script must contain exactly one Task definition.",
+        InvalidAssignmentTarget => "Invalid assignment target",
+        UnexpectedToken => "Unexpected token: {0} ({1})",
+        MacroRequiresString => "Syntax Error: The '@' macro strictly requires a string literal path (e.g., @ \"utils\"). Identifier shorthand is not allowed.",
+        ExpectedIdentifier => "Expected identifier, found {0}",
+        
+        CircularDependency => "Circular Dependency: {0}",
+        ResourceContentNotLoaded => "Resource content not loaded: {0}",
+        ScriptMustBeTask => "Hank Error: Script must evaluate to a Task definition.",
+        MacroResourceNotFound => "Macro resource not found: @{0}",
+        
+        TargetNotFunction => "Target is not a function: {0}",
+        TooManyArguments => "Too many arguments",
+        MissingRequiredParameter => "Missing required parameter: {0}",
+        Halt => "HANK_HALT:{0}",
+        GenericRuntimeError => "{0}"
+    ];
+
+    public static function create(code:HankError, ?args:Array<Dynamic>, ?fileName:String, ?line:Int, ?lineText:String):HankErrorValue {
+        var tmpl = messages.get(code);
+        if (tmpl == null) tmpl = "Unknown Error";
+
+        if (args != null) {
+            for (i in 0...args.length) {
+                tmpl = StringTools.replace(tmpl, '{' + i + '}', Std.string(args[i]));
+            }
+        }
+
+        if (fileName != null && line != null && lineText != null) {
+            tmpl = 'ERROR: $tmpl in $fileName at\n\t$line:\t$lineText';
+        }
+
+        return { code: code, message: tmpl };
+    }
+}

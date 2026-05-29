@@ -1,5 +1,7 @@
 package hank;
 
+import hank.Types;
+
 enum TokenType {
     Identifier;
     Number;
@@ -105,7 +107,7 @@ class Lexer {
                 case '[': addToken(LBracket, "[");
                 case ']': addToken(RBracket, "]");
                 default:
-                    addToken(Error, 'Unexpected character: $char');
+                    addToken(Error, HankErrorRegistry.create(UnexpectedCharacter, [char]).message);
             }
             pos++;
         }
@@ -163,7 +165,7 @@ class Lexer {
             pos++;
         }
         if (pos >= input.length) {
-            addToken(Error, "Unclosed string literal");
+            addToken(Error, HankErrorRegistry.create(UnclosedStringLiteral).message);
             return;
         }
         pos++; // skip quote

@@ -5,7 +5,7 @@ import hank.Types;
 enum EvalResult {
     Value(v:Value);
     Return(v:Value);
-    Error(msg:String);
+    Error(err:HankErrorValue);
 }
 
 class Interpreter implements ExecutionContext {
@@ -23,8 +23,8 @@ class Interpreter implements ExecutionContext {
     public function run(ast:Expr):Value {
         return switch (evalInScope(ast, globalScope)) {
             case Value(v) | Return(v): v;
-            case Error(msg):
-                Sys.stderr().writeString('Runtime Error: $msg\n');
+            case Error(err):
+                Sys.stderr().writeString('Runtime Error: ${err.message}\n');
                 VVoid;
         }
     }
@@ -32,7 +32,7 @@ class Interpreter implements ExecutionContext {
     public function eval(node:Expr):Value {
         return switch (evalInScope(node, globalScope)) {
             case Value(v) | Return(v): v;
-            case Error(msg): throw msg;
+            case Error(err): throw err;
         }
     }
 
@@ -178,10 +178,10 @@ class Interpreter implements ExecutionContext {
                         }
 
                         switch (res) {
-                            case Error(errMsg):
+                            case Error(err):
                                 if (rescue != null) {
                                     var rescueScope = new HankScope(scope);
-                                    if (catchVar != null) rescueScope.set(catchVar, VString(errMsg));
+                                    if (catchVar != null) rescueScope.set(catchVar, VString(err.message));
                                     evalInScope(rescue, rescueScope);
                                 } else res;
                             default: res;
@@ -197,7 +197,9 @@ class Interpreter implements ExecutionContext {
                 if (t.isNative) {
                     Value(t.native(args, this));
                 } else {
-                    if (args.length > t.params.length) return Error("Too many arguments");
+                    if (args.length > t.params.length) {
+                        return Error(HankErrorRegistry.create(TooManyArguments));
+                    }
                     
                     var taskScope = new HankScope(t.closure);
                     for (i in 0...t.params.length) {
@@ -211,7 +213,7 @@ class Interpreter implements ExecutionContext {
                                 case other: return other;
                             }
                         } else if (!p.isOptional) {
-                            return Error('Missing required parameter: ${p.name}');
+                            return Error(HankErrorRegistry.create(MissingRequiredParameter, [p.name]));
                         }
                         taskScope.set(p.name, val);
                     }
@@ -221,7 +223,8 @@ class Interpreter implements ExecutionContext {
                         case other: other;
                     }
                 }
-            default: Error('Target is not a function: ${ValueTools.toString(task)}');
+            default:
+                Error(HankErrorRegistry.create(TargetNotFunction, [ValueTools.toString(task)]));
         }
     }
 
@@ -236,7 +239,7 @@ class Interpreter implements ExecutionContext {
         }
         return switch (callInternal(task, finalArgs, globalScope)) {
             case Value(v) | Return(v): v;
-            case Error(msg): throw msg;
+            case Error(err): throw err;
         }
     }
 

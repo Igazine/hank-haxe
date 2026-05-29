@@ -25,7 +25,7 @@ class Parser {
             skipNewlines();
         }
 
-        if (isEof()) throw error("Syntax Error: Script is empty.");
+        if (isEof()) throw error(EmptyScript);
 
         // 2. Parse exactly ONE TaskDef (FuncDef or Block)
         var mainTask:Expr = null;
@@ -34,14 +34,14 @@ class Parser {
         } else if (peek().type == LBrace) {
             mainTask = parseBlock();
         } else {
-            throw error("Syntax Error: Expected main task definition (a closure or a block).");
+            throw error(ExpectedMainTask);
         }
         stmts.push(mainTask);
 
         // 3. Assert EOF
         skipNewlines();
         if (!isEof()) {
-            throw error("Syntax Error: Unexpected code outside of main task. A Hank script must contain exactly one Task definition.");
+            throw error(UnexpectedCodeOutsideMainTask);
         }
 
         if (stmts.length == 1) return stmts[0];
@@ -110,7 +110,7 @@ class Parser {
                     var value = parseExpression();
                     return EAssign(name, value, td);
                 default:
-                    throw error("Invalid assignment target");
+                    throw error(InvalidAssignmentTarget);
             }
         }
 
@@ -156,7 +156,7 @@ class Parser {
             case Caret:
                 parseReturn();
             default:
-                throw error('Unexpected token: ${t.type} (${t.literal})');
+                throw error(UnexpectedToken, [t.type, t.literal]);
         }
 
         return finishPrimary(expr);
@@ -317,7 +317,7 @@ class Parser {
         if (peek().type == String) {
             rawPath = consume(String).literal;
         } else {
-            throw error("Syntax Error: The '@' macro strictly requires a string literal path (e.g., @ \"utils\"). Identifier shorthand is not allowed.");
+            throw error(MacroRequiresString);
         }
 
         var taskAst = macroResolver(rawPath);
@@ -332,7 +332,7 @@ class Parser {
             pos++;
             return t.literal;
         }
-        throw error('Expected identifier, found ${t.type}');
+        throw error(ExpectedIdentifier, [t.type]);
     }
 
     function consume(type:TokenType):Token {
@@ -341,7 +341,7 @@ class Parser {
             pos++;
             return t;
         }
-        throw error('Expected $type, found ${t.type} (${t.literal})');
+        throw error(UnexpectedToken, [type, t.type]);
     }
 
     function peek():Token {
@@ -364,8 +364,8 @@ class Parser {
         return pos >= tokens.length || tokens[pos].type == EOF;
     }
 
-    function error(msg:String):String {
+    function error(code:HankError, ?args:Array<Dynamic>):HankErrorValue {
         var t = peek();
-        return 'ERROR: $msg in $filename at\n\t${t.line}:\t${t.lineText}';
+        return HankErrorRegistry.create(code, args, filename, t.line, t.lineText);
     }
 }
