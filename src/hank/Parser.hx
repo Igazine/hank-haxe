@@ -62,9 +62,15 @@ class Parser {
     function parseFlowControl():Expr {
         var t = consume(Question);
         var tdRoot = { line: t.line, lineText: t.lineText };
-        consume(LParen);
-        var condition = parseExpression();
-        consume(RParen);
+        
+        var condition:Expr;
+        if (peek().type == LParen) {
+            consume(LParen);
+            condition = parseExpression();
+            consume(RParen);
+        } else {
+            condition = parseExpression();
+        }
         
         var success = parseBlock();
         
