@@ -85,9 +85,11 @@ class Parser {
         
         if (peek().type == Rescue) {
             consume(Rescue);
-            consume(LParen);
-            catchVar = consumeIdentifier();
-            consume(RParen);
+            if (peek().type == LParen) {
+                consume(LParen);
+                catchVar = consumeIdentifier();
+                consume(RParen);
+            }
             rescue = parseBlock();
         } else {
             pos = savedPos;

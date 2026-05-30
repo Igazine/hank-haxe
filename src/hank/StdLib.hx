@@ -87,6 +87,10 @@ class StdLib implements IExtension {
                     for (k in k1) if (!o2.exists(k) || !hankEquals(o1.get(k), o2.get(k))) return false;
                     true;
                 case [VOpaque(l1, d1), VOpaque(l2, d2)]: l1 == l2 && d1 == d2;
+                case [VError(c1, a1), VError(c2, a2)]:
+                    if (c1 != c2 || a1.length != a2.length) return false;
+                    for (i in 0...a1.length) if (!hankEquals(a1[i], a2[i])) return false;
+                    true;
                 default: false;
             };
         };
@@ -110,23 +114,36 @@ class StdLib implements IExtension {
             "signal" => (args, ctx) -> {
                 if (args.length > 0) Sys.println('[SIGNAL] ' + valToString(args[0]));
                 VVoid;
-            },
+            }
+        ]);
+
+        mods.set("loop", [
             "while" => (args, ctx) -> {
                 if (args.length < 2) return VVoid;
                 var cond = args[0];
                 var body = args[1];
-                var res:Value = VVoid;
+                var last:Value = VVoid;
                 while (true) {
                     var condVal = ctx.call(cond, []);
-                    var truthy = switch (condVal) {
-                        case VVoid: false;
-                        default: true;
+                    if (ctx.isError(condVal)) return condVal;
+                    if (condVal == VVoid) break;
+                    
+                    var res = ctx.call(body, []);
+                    if (ctx.isError(res)) return res;
+
+                    var isBreak = false;
+                    switch (res) {
+                        case VOpaque(l, d): 
+                            if (l == "__ControlFlow" && Std.string(d) == "Break") isBreak = true;
+                        default:
                     }
-                    if (!truthy) break;
-                    res = ctx.call(body, []);
+                    if (isBreak) break;
+
+                    last = res;
                 }
-                res;
-            }
+                last;
+            },
+            "break" => (args, ctx) -> VOpaque("__ControlFlow", "Break")
         ]);
 
         mods.set("env", [
@@ -136,7 +153,13 @@ class StdLib implements IExtension {
         ]);
 
         mods.set("str", [
-            "length" => (args, ctx) -> args.length == 0 ? VVoid : VNumber(valToString(args[0]).length),
+            "length" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VString(s): VNumber(s.length);
+                    case other: VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("str.length")]);
+                }
+            },
             "format" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
                 var res = valToString(args[0]);
@@ -146,7 +169,13 @@ class StdLib implements IExtension {
                 VString(res);
             },
             "concat" => (args, ctx) -> VString(args.map(valToString).join("")),
-            "trim" => (args, ctx) -> args.length == 0 ? VVoid : VString(StringTools.trim(valToString(args[0])))
+            "trim" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VString(s): VString(StringTools.trim(s));
+                    case other: VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("str.trim")]);
+                }
+            }
         ]);
 
         mods.set("num", [
@@ -201,33 +230,79 @@ class StdLib implements IExtension {
         mods.set("math", [
             "add" => (args, ctx) -> {
                 var sum = 0.0;
-                for (a in args) switch (a) { case VNumber(n): sum += n; default: }
+                for (a in args) {
+                    switch (a) {
+                        case VNumber(n): sum += n;
+                        case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.add")]);
+                    }
+                }
                 VNumber(sum);
             },
-            "sub" => (args, ctx) -> (args.length < 2) ? VVoid : {
-                var a = 0.0; switch (args[0]) { case VNumber(n): a = n; default: }
-                var b = 0.0; switch (args[1]) { case VNumber(n): b = n; default: }
+            "sub" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                var a = 0.0;
+                var b = 0.0;
+                switch (args[0]) {
+                    case VNumber(n): a = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.sub")]);
+                }
+                switch (args[1]) {
+                    case VNumber(n): b = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.sub")]);
+                }
                 VNumber(a - b);
             },
             "mul" => (args, ctx) -> {
                 if (args.length == 0) return VNumber(0.0);
                 var res = 1.0;
-                for (a in args) switch (a) { case VNumber(n): res *= n; default: }
+                for (a in args) {
+                    switch (a) {
+                        case VNumber(n): res *= n;
+                        case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.mul")]);
+                    }
+                }
                 VNumber(res);
             },
-            "div" => (args, ctx) -> (args.length < 2) ? VVoid : {
-                var a = 0.0; switch (args[0]) { case VNumber(n): a = n; default: }
-                var b = 0.0; switch (args[1]) { case VNumber(n): b = n; default: }
+            "div" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                var a = 0.0;
+                var b = 0.0;
+                switch (args[0]) {
+                    case VNumber(n): a = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.div")]);
+                }
+                switch (args[1]) {
+                    case VNumber(n): b = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.div")]);
+                }
                 if (b == 0) VVoid else VNumber(a / b);
             },
-            "gt" => (args, ctx) -> (args.length < 2) ? VVoid : {
-                var a = 0.0; switch (args[0]) { case VNumber(n): a = n; default: }
-                var b = 0.0; switch (args[1]) { case VNumber(n): b = n; default: }
+            "gt" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                var a = 0.0;
+                var b = 0.0;
+                switch (args[0]) {
+                    case VNumber(n): a = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.gt")]);
+                }
+                switch (args[1]) {
+                    case VNumber(n): b = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.gt")]);
+                }
                 if (a > b) VNumber(1.0) else VVoid;
             },
-            "lt" => (args, ctx) -> (args.length < 2) ? VVoid : {
-                var a = 0.0; switch (args[0]) { case VNumber(n): a = n; default: }
-                var b = 0.0; switch (args[1]) { case VNumber(n): b = n; default: }
+            "lt" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                var a = 0.0;
+                var b = 0.0;
+                switch (args[0]) {
+                    case VNumber(n): a = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.lt")]);
+                }
+                switch (args[1]) {
+                    case VNumber(n): b = n;
+                    case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math.lt")]);
+                }
                 if (a < b) VNumber(1.0) else VVoid;
             },
             "eq" => (args, ctx) -> (args.length < 2) ? VVoid : (hankEquals(args[0], args[1]) ? VNumber(1.0) : VVoid)
@@ -248,37 +323,82 @@ class StdLib implements IExtension {
         ]);
 
         mods.set("arr", [
-            "length" => (args, ctx) -> switch (args[0]) { case VArray(a): VNumber(a.length); default: VVoid; },
-            "get" => (args, ctx) -> switch (args[0]) {
-                case VArray(a):
-                    var idx = 0; switch (args[1]) { case VNumber(n): idx = Std.int(n); default: return VVoid; }
-                    if (idx < 0 || idx >= a.length) VVoid else a[idx];
-                default: VVoid;
+            "length" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VArray(a): VNumber(a.length);
+                    case other: VError(4007, [VString("Array"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("arr.length")]);
+                }
             },
-            "push" => (args, ctx) -> switch (args[0]) {
-                case VArray(a): a.push(args[1]); VVoid;
-                default: VVoid;
+            "get" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                return switch (args[0]) {
+                    case VArray(a):
+                        switch (args[1]) {
+                            case VNumber(n):
+                                var idx = Std.int(n);
+                                if (idx < 0 || idx >= a.length) VVoid else a[idx];
+                            case other: VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("arr.get")]);
+                        }
+                    case other: VError(4007, [VString("Array"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("arr.get")]);
+                }
             },
-            "pop" => (args, ctx) -> switch (args[0]) {
-                case VArray(a): if (a.length > 0) a.pop() else VVoid;
-                default: VVoid;
+            "push" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                return switch (args[0]) {
+                    case VArray(a): a.push(args[1]); VVoid;
+                    case other: VError(4007, [VString("Array"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("arr.push")]);
+                }
             },
-            "each" => (args, ctx) -> switch (args[0]) {
-                case VArray(a):
-                    var task = args[1];
-                    var items = a.copy();
-                    for (i in 0...items.length) ctx.call(task, [items[i], VNumber(i)]);
-                    VVoid;
-                default: VVoid;
+            "pop" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VArray(a): if (a.length > 0) a.pop() else VVoid;
+                    case other: VError(4007, [VString("Array"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("arr.pop")]);
+                }
+            },
+            "each" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                return switch (args[0]) {
+                    case VArray(a):
+                        var task = args[1];
+                        var items = a.copy();
+                        for (i in 0...items.length) {
+                            var res = ctx.call(task, [items[i], VNumber(i)]);
+                            if (ctx.isError(res)) return res;
+
+                            var isBreak = false;
+                            switch (res) {
+                                case VOpaque(l, d): if (l == "__ControlFlow" && Std.string(d) == "Break") isBreak = true;
+                                default:
+                            }
+                            if (isBreak) break;
+                        }
+                        VVoid;
+                    case other: VError(4007, [VString("Array"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("arr.each")]);
+                }
             }
         ]);
 
         mods.set("obj", [
-            "get" => (args, ctx) -> switch (args[0]) {
-                case VObject(m):
-                    var key = valToString(args[1]);
-                    if (m.exists(key)) m.get(key) else VVoid;
-                default: VVoid;
+            "get" => (args, ctx) -> {
+                if (args.length < 2) return VVoid;
+                return switch (args[0]) {
+                    case VObject(m):
+                        var key = valToString(args[1]);
+                        if (m.exists(key)) m.get(key) else VVoid;
+                    default: VVoid;
+                }
+            },
+            "set" => (args, ctx) -> {
+                if (args.length < 3) return VVoid;
+                return switch (args[0]) {
+                    case VObject(m):
+                        var key = valToString(args[1]);
+                        m.set(key, args[2]);
+                        VVoid;
+                    case other: VError(4007, [VString("Object"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("obj.set")]);
+                }
             },
             "keys" => (args, ctx) -> switch (args[0]) {
                 case VObject(m):
@@ -335,6 +455,43 @@ class StdLib implements IExtension {
                         VString(ereg.replace(s, repl));
                     default:
                         VString(StringTools.replace(s, valToString(args[1]), repl));
+                }
+            }
+        ]);
+
+        mods.set("err", [
+            "code" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VError(code, _): VNumber(code);
+                    case other: VError(4007, [VString("Error"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("err.code")]);
+                }
+            },
+            "message" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VError(code, errArgs):
+                        var loc = ctx.getLocalization();
+                        var tmpl = loc.exists(code) ? loc.get(code) : "Unknown Error";
+                        for (i in 0...errArgs.length) {
+                            tmpl = StringTools.replace(tmpl, '{' + i + '}', ValueTools.toString(errArgs[i]));
+                        }
+                        VString(tmpl);
+                    case other: VError(4007, [VString("Error"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("err.message")]);
+                }
+            },
+            "args" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VError(_, args): VArray(args);
+                    case other: VError(4007, [VString("Error"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("err.args")]);
+                }
+            },
+            "isError" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                return switch (args[0]) {
+                    case VError(_, _): VNumber(1.0);
+                    default: VVoid;
                 }
             }
         ]);

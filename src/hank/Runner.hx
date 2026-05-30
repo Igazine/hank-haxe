@@ -13,8 +13,18 @@ import hank.Types;
 class Runner {
     var resourceCache:Map<String, Resource> = new Map();
     public var coreScope:Scope = new HankScope();
+    public var localization:Map<Int, String> = new Map();
 
     public function new() {}
+
+    /**
+     * Registers a localization map (Code -> Template).
+     */
+    public function registerLocalization(map:Map<Int, String>) {
+        for (code => tmpl in map) {
+            localization.set(code, tmpl);
+        }
+    }
 
     /**
      * Registers a set of native tasks under a module name.
@@ -90,11 +100,12 @@ class Runner {
         if (args == null) args = [];
         var ast = load(resource);
 
-        var interpreter = new Interpreter(null, coreScope);
+        var interpreter = new Interpreter(null, coreScope, localization);
         var scriptTask = interpreter.run(ast);
 
         return switch (scriptTask) {
             case VTask(_): interpreter.call(scriptTask, args);
+            case VError(_, _): scriptTask;
             default: throw HankErrorRegistry.create(ScriptMustBeTask);
         }
     }

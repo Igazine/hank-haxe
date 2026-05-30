@@ -5,7 +5,8 @@ import hank.Types;
 enum EvalResult {
     Value(v:Value);
     Return(v:Value);
-    Error(err:HankErrorValue);
+    Break;
+    Error(v:Value); // VError
 }
 
 class Interpreter implements ExecutionContext {
@@ -15,38 +16,59 @@ class Interpreter implements ExecutionContext {
     public var scope(get, never):Scope;
     function get_scope():Scope return globalScope;
 
-    public function new(?parentScope:Scope, coreScope:Scope) {
+    public function new(?parentScope:Scope, coreScope:Scope, ?localization:Map<Int, String>) {
         this.coreScope = coreScope;
         this.globalScope = new HankScope(parentScope != null ? parentScope : coreScope);
+        this.localization = localization != null ? localization : new Map();
     }
+
+    var localization:Map<Int, String>;
+    public function getLocalization():Map<Int, String> return localization;
 
     public function run(ast:Expr):Value {
         return switch (evalInScope(ast, globalScope)) {
             case Value(v) | Return(v): v;
-            case Error(err):
-                Sys.stderr().writeString('Runtime Error: ${err.message}\n');
-                VVoid;
+            case Break: VVoid;
+            case Error(v): v;
         }
     }
 
     public function eval(node:Expr):Value {
         return switch (evalInScope(node, globalScope)) {
             case Value(v) | Return(v): v;
-            case Error(err): throw err;
+            case Break: VOpaque("__ControlFlow", "Break");
+            case Error(v): v;
+        }
+    }
+
+    public function isError(v:Value):Bool {
+        return switch (v) {
+            case VError(_, _): true;
+            default: false;
         }
     }
 
     function evalInScope(node:Expr, scope:Scope):EvalResult {
         return switch (node) {
             case ELiteral(v, _): Value(v);
+            case EError(code, args, _):
+                var evaluatedArgs = [];
+                for (arg in args) {
+                    switch (evalInScope(arg, scope)) {
+                        case Value(v): evaluatedArgs.push(v);
+                        case other: return other;
+                    }
+                }
+                Value(VError(code, evaluatedArgs));
             case EIdent(name, isCore, _):
                 Value(isCore ? coreScope.get(name) : scope.get(name));
             case EAssign(name, valExpr, _):
-                switch (evalInScope(valExpr, scope)) {
+                var res = evalInScope(valExpr, scope);
+                switch (res) {
                     case Value(v):
                         scope.set(name, v);
-                        Value(v);
-                    case other: other;
+                        return Value(v);
+                    case other: return other;
                 }
             case EBlock(stmts, _):
                 // --- TASK HOISTING PASS ---
@@ -92,7 +114,8 @@ class Interpreter implements ExecutionContext {
                         default:
                     }
 
-                    switch (evalInScope(stmt, scope)) {
+                    var res = evalInScope(stmt, scope);
+                    switch (res) {
                         case Value(v): last = v;
                         case other: return other;
                     }
@@ -109,35 +132,42 @@ class Interpreter implements ExecutionContext {
                 }));
 
             case EFuncCall(targetExpr, argExprs, _):
-                switch (evalInScope(targetExpr, scope)) {
+                var tRes = evalInScope(targetExpr, scope);
+                switch (tRes) {
                     case Value(target):
                         var args = [];
                         for (argExpr in argExprs) {
-                            switch (evalInScope(argExpr, scope)) {
+                            var aRes = evalInScope(argExpr, scope);
+                            switch (aRes) {
                                 case Value(v): args.push(v);
                                 case other: return other;
                             }
                         }
-                        callInternal(target, args, scope);
-                    case other: other;
+                        return callInternal(target, args, scope);
+                    case other: return other;
                 }
 
             case EField(objExpr, fieldName, _):
-                switch (evalInScope(objExpr, scope)) {
-                    case Value(VObject(map)):
-                        Value(map.exists(fieldName) ? map.get(fieldName) : VVoid);
-                    case Value(VArray(vec)) if (fieldName == "length"):
-                        Value(VNumber(vec.length));
-                    case Value(VString(s)) if (fieldName == "length"):
-                        Value(VNumber(s.length));
-                    case Value(_): Value(VVoid);
-                    case other: other;
+                var oRes = evalInScope(objExpr, scope);
+                switch (oRes) {
+                    case Value(v):
+                        switch (v) {
+                            case VObject(map):
+                                return Value(map.exists(fieldName) ? map.get(fieldName) : VVoid);
+                            case VArray(vec) if (fieldName == "length"):
+                                return Value(VNumber(vec.length));
+                            case VString(s) if (fieldName == "length"):
+                                return Value(VNumber(s.length));
+                            default: return Value(VVoid);
+                        }
+                    case other: return other;
                 }
 
             case EObject(fields, _):
                 var map = new Map<String, Value>();
                 for (k => vExpr in fields) {
-                    switch (evalInScope(vExpr, scope)) {
+                    var res = evalInScope(vExpr, scope);
+                    switch (res) {
                         case Value(v): map.set(k, v);
                         case other: return other;
                     }
@@ -147,7 +177,8 @@ class Interpreter implements ExecutionContext {
             case EArray(items, _):
                 var vec = [];
                 for (itemExpr in items) {
-                    switch (evalInScope(itemExpr, scope)) {
+                    var res = evalInScope(itemExpr, scope);
+                    switch (res) {
                         case Value(v): vec.push(v);
                         case other: return other;
                     }
@@ -155,43 +186,40 @@ class Interpreter implements ExecutionContext {
                 Value(VArray(vec));
 
             case EUnOp(op, target, _):
-                switch (evalInScope(target, scope)) {
+                var res = evalInScope(target, scope);
+                switch (res) {
                     case Value(val):
                         switch (op) {
-                            case "!": Value(isTruthy(val) ? VVoid : VNumber(1));
-                            case "?": Value(val);
-                            case "^": Return(val);
-                            default: Value(VVoid);
+                            case "!": return Value(isTruthy(val) ? VVoid : VNumber(1));
+                            case "?": return Value(val);
+                            case "^": return Return(val);
+                            default: return Value(VVoid);
                         }
-                    case other: other;
+                    case other: return other;
                 }
 
             case EFlowControl(condition, success, fallback, rescue, catchVar, _):
                 var condRes = evalInScope(condition, scope);
+                var branchRes:EvalResult = null;
+
                 switch (condRes) {
                     case Value(condVal):
-                        var res = if (isTruthy(condVal)) {
-                            evalInScope(success, scope);
+                        if (isTruthy(condVal)) {
+                            branchRes = evalInScope(success, scope);
                         } else if (fallback != null) {
-                            evalInScope(fallback, scope);
+                            branchRes = evalInScope(fallback, scope);
                         } else {
-                            Value(VVoid);
+                            branchRes = Value(VVoid);
                         }
+                    case other: branchRes = other;
+                }
 
-                        switch (res) {
-                            case Error(err):
-                                if (rescue != null) {
-                                    var rescueScope = new HankScope(scope);
-                                    if (catchVar != null) rescueScope.set(catchVar, VString(err.message));
-                                    evalInScope(rescue, rescueScope);
-                                } else res;
-                            default: res;
-                        }
+                switch (branchRes) {
                     case Error(err) if (rescue != null):
                         var rescueScope = new HankScope(scope);
-                        if (catchVar != null) rescueScope.set(catchVar, VString(err.message));
-                        evalInScope(rescue, rescueScope);
-                    case other: other;
+                        if (catchVar != null) rescueScope.set(catchVar, err);
+                        return evalInScope(rescue, rescueScope);
+                    default: return branchRes;
                 }
         }
     }
@@ -200,16 +228,19 @@ class Interpreter implements ExecutionContext {
         return switch (task) {
             case VTask(t):
                 if (t.isNative) {
-                    return try {
-                        Value(t.native(args, this));
-                    } catch (e:HankErrorValue) {
-                        Error(e);
+                    try {
+                        var res = t.native(args, this);
+                        switch (res) {
+                            case VOpaque(l, d) if (l == "__ControlFlow" && Std.string(d) == "Break"): return Break;
+                            case VError(_, _): return Error(res);
+                            default: return Value(res);
+                        }
                     } catch (e:Dynamic) {
-                        Error(HankErrorRegistry.create(GenericRuntimeError, [Std.string(e)]));
+                        return Error(VError(4006, [VString(Std.string(e))]));
                     }
                 } else {
                     if (args.length > t.params.length) {
-                        return Error(HankErrorRegistry.create(TooManyArguments));
+                        return Error(VError(4002, []));
                     }
                     
                     var taskScope = new HankScope(t.closure);
@@ -219,23 +250,26 @@ class Interpreter implements ExecutionContext {
                         if (i < args.length) {
                             val = args[i];
                         } else if (p.defaultValue != null) {
-                            switch (evalInScope(p.defaultValue, taskScope)) {
+                            var res = evalInScope(p.defaultValue, taskScope);
+                            switch (res) {
                                 case Value(v): val = v;
                                 case other: return other;
                             }
                         } else if (!p.isOptional) {
-                            return Error(HankErrorRegistry.create(MissingRequiredParameter, [p.name]));
+                            return Error(VError(4003, [VString(p.name)]));
                         }
                         taskScope.set(p.name, val);
                     }
                     
-                    switch (evalInScope(t.body, taskScope)) {
-                        case Value(v) | Return(v): Value(v);
-                        case other: other;
+                    var res = evalInScope(t.body, taskScope);
+                    switch (res) {
+                        case Value(v) | Return(v):
+                            if (isError(v)) return Error(v) else return Value(v);
+                        case other: return other;
                     }
                 }
             default:
-                Error(HankErrorRegistry.create(TargetNotFunction, [ValueTools.toString(task)]));
+                Error(VError(4001, [VString(ValueTools.toString(task))]));
         }
     }
 
@@ -248,9 +282,11 @@ class Interpreter implements ExecutionContext {
                 }
             default:
         }
-        return switch (callInternal(task, finalArgs, globalScope)) {
+        var res = callInternal(task, finalArgs, globalScope);
+        return switch (res) {
             case Value(v) | Return(v): v;
-            case Error(err): throw err;
+            case Error(v): v;
+            case Break: VOpaque("__ControlFlow", "Break");
         }
     }
 

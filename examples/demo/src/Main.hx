@@ -13,10 +13,25 @@ class Main {
         var args = Sys.args();
         var current = Sys.getCwd();
         
-        // Submodule is at vendor/hank relative to the hank-haxe root.
-        var workspaceRoot = Path.normalize(Path.join([current, "vendor/hank"]));
-        if (!FileSystem.exists(workspaceRoot)) {
-            workspaceRoot = Path.normalize(Path.join([current, "../../vendor/hank"]));
+        // Robust submodule discovery
+        var workspaceRoot = "";
+        var checkPaths = [
+            Path.join([current, "vendor/hank"]),
+            Path.join([current, "hank-haxe/vendor/hank"]),
+            Path.join([current, "../../vendor/hank"])
+        ];
+
+        for (p in checkPaths) {
+            var norm = Path.normalize(p);
+            if (FileSystem.exists(norm) && FileSystem.isDirectory(norm)) {
+                workspaceRoot = norm;
+                break;
+            }
+        }
+
+        if (workspaceRoot == "") {
+            Sys.stderr().writeString("Error: Could not find vendor/hank submodule.\n");
+            Sys.exit(1);
         }
 
         if (args.length == 0) {
@@ -56,6 +71,13 @@ class Main {
     static function createRunner():Runner {
         var runner = new Runner();
 
+        // 0. Register Localization
+        runner.registerLocalization([
+            4001 => "Target is not a function: {0}",
+            4007 => "Type Mismatch: Expected {0}, got {1} in {2}",
+            4005 => "Value exceeds safe integer bounds: {0} in {1}"
+        ]);
+
         // Register Extensions (Batteries included, but disconnected)
         runner.registerExtension(new StdLib());
         runner.registerExtension(new PlatformExtension());
@@ -79,11 +101,11 @@ class Main {
             "test/conformance/11_regex_parse.hank",
             "test/conformance/12_data_advanced.hank",
             "test/conformance/13_logic_module.hank",
-            // "test/conformance/14_syslib_hank.hank", // MOVED to extensions
             "test/conformance/15_logic_eq.hank",
             "test/conformance/16_chained_assign.hank",
             "test/conformance/17_num_module.hank",
             "test/conformance/18_runtime_module.hank",
+            "test/conformance/19_error_handling.hank",
         ];
 
         for (t in tests) {

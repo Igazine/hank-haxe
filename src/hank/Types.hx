@@ -8,6 +8,7 @@ enum ValueType {
     TypeObject;
     TypeOpaque;
     TypeTask;
+    TypeError;
 }
 
 enum Value {
@@ -18,6 +19,7 @@ enum Value {
     VObject(v:Map<String, Value>);
     VOpaque(label:String, data:Dynamic);
     VTask(v:TaskValue);
+    VError(code:Int, args:Array<Value>);
 }
 
 typedef TaskValue = {
@@ -38,6 +40,8 @@ typedef Param = {
 interface ExecutionContext {
     function call(task:Value, args:Array<Value>):Value;
     function eval(node:Expr):Value;
+    function isError(val:Value):Bool;
+    function getLocalization():Map<Int, String>;
     var scope(get, never):Scope;
 }
 
@@ -64,6 +68,7 @@ enum Expr {
     EObject(fields:Map<String, Expr>, td:TokenData);
     EArray(items:Array<Expr>, td:TokenData);
     EFlowControl(condition:Expr, success:Expr, ?fallback:Expr, ?rescue:Expr, ?catchVar:String, td:TokenData);
+    EError(code:Int, args:Array<Expr>, td:TokenData);
 }
 
 interface IHankSerializable {
@@ -80,6 +85,20 @@ class ValueTools {
             case VObject(_): TypeObject;
             case VOpaque(_, _): TypeOpaque;
             case VTask(_): TypeTask;
+            case VError(_, _): TypeError;
+        }
+    }
+
+    public static function typeToString(t:ValueType):String {
+        return switch (t) {
+            case TypeVoid: "Void";
+            case TypeNumber: "Number";
+            case TypeString: "String";
+            case TypeArray: "Array";
+            case TypeObject: "Object";
+            case TypeOpaque: "Opaque";
+            case TypeTask: "Task";
+            case TypeError: "Error";
         }
     }
 
@@ -95,6 +114,7 @@ class ValueTools {
             case VObject(_): "{Object}";
             case VOpaque(label, _): '[Opaque:$label]';
             case VTask(_): "[Task]";
+            case VError(code, _): '[Error:$code]';
         }
     }
 }
@@ -102,7 +122,7 @@ class ValueTools {
 class ExprTools {
     public static function getTd(e:Expr):TokenData {
         return switch (e) {
-            case EBlock(_, td) | EAssign(_, _, td) | ELiteral(_, td) | EIdent(_, _, td) | EField(_, _, td) | EFuncDef(_, _, td) | EFuncCall(_, _, td) | EUnOp(_, _, td) | EObject(_, td) | EArray(_, td) | EFlowControl(_, _, _, _, _, td): td;
+            case EBlock(_, td) | EAssign(_, _, td) | ELiteral(_, td) | EIdent(_, _, td) | EField(_, _, td) | EFuncDef(_, _, td) | EFuncCall(_, _, td) | EUnOp(_, _, td) | EObject(_, td) | EArray(_, td) | EFlowControl(_, _, _, _, _, td) | EError(_, _, td): td;
         }
     }
 }
@@ -134,18 +154,19 @@ enum abstract HankError(Int) to Int from Int {
     var Halt = 4004;
     var BitwiseOutOfBounds = 4005;
     var GenericRuntimeError = 4006;
-    }
+    var TypeMismatch = 4007;
+}
 
-    class HankErrorValue {
-        public var code:HankError;
-        public var message:String;
-        public function new(code:HankError, message:String) {
-            this.code = code;
-            this.message = message;
-        }
+class HankErrorValue {
+    public var code:HankError;
+    public var message:String;
+    public function new(code:HankError, message:String) {
+        this.code = code;
+        this.message = message;
     }
+}
 
-    class HankErrorRegistry {
+class HankErrorRegistry {
     public static var messages:Map<HankError, String> = [
         UnexpectedCharacter => "Unexpected character: {0}",
         UnclosedStringLiteral => "Unclosed string literal",
@@ -168,6 +189,7 @@ enum abstract HankError(Int) to Int from Int {
         MissingRequiredParameter => "Missing required parameter: {0}",
         Halt => "HANK_HALT:{0}",
         BitwiseOutOfBounds => "Value exceeds safe integer bounds for bitwise operation: {0}",
+        TypeMismatch => "Type Mismatch: Expected {0}, got {1} in {2}",
         GenericRuntimeError => "{0}"
     ];
 

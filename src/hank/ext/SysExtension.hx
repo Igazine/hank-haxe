@@ -3,8 +3,7 @@ package hank.ext;
 import hank.Types;
 
 class SysExtension implements IExtension {
-    public var name(default, null):String;
-    public function get_name():String return "SysExtension";
+    public var name(default, null):String = "SysExtension";
 
     public function new() {}
 
@@ -29,7 +28,7 @@ class SysExtension implements IExtension {
             },
             "pid" => (args, ctx) -> {
                 #if (linux || macos || windows || bsd)
-                return VNumber(Sys.programPath() != null ? 0 : 0); // Placeholder, Haxe Sys doesn't have PID easily
+                return VNumber(0); // Placeholder
                 #else
                 return VVoid;
                 #end
@@ -47,7 +46,7 @@ class SysExtension implements IExtension {
                 return VString("unknown");
             },
             "name" => (args, ctx) -> VString(Sys.systemName()),
-            "arch" => (args, ctx) -> VString("unknown"), // Haxe doesn't provide arch easily
+            "arch" => (args, ctx) -> VString("unknown"),
             "memory" => (args, ctx) -> {
                 var map = new Map<String, Value>();
                 map.set("total", VNumber(0));
@@ -60,79 +59,85 @@ class SysExtension implements IExtension {
 
         // --- fs ---
         mods.set("fs", [
-            "exists" => (args, ctx) -> (args.length > 0 && sys.FileSystem.exists(valToString(args[0]))) ? VNumber(1.0) : VVoid,
-            "isDir" => (args, ctx) -> (args.length > 0 && sys.FileSystem.isDirectory(valToString(args[0]))) ? VNumber(1.0) : VVoid,
-            "absPath" => (args, ctx) -> args.length == 0 ? VVoid : VString(sys.FileSystem.fullPath(valToString(args[0]))),
+            "exists" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                var path = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.exists")]);
+                }
+                return sys.FileSystem.exists(path) ? VNumber(1.0) : VVoid;
+            },
+            "isDir" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                var path = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.isDir")]);
+                }
+                return sys.FileSystem.isDirectory(path) ? VNumber(1.0) : VVoid;
+            },
+            "absPath" => (args, ctx) -> {
+                if (args.length == 0) return VVoid;
+                var path = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.absPath")]);
+                }
+                return VString(sys.FileSystem.fullPath(path));
+            },
             "read" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
+                var path = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.read")]);
+                }
                 try {
-                    return VString(sys.io.File.getContent(valToString(args[0])));
+                    return VString(sys.io.File.getContent(path));
                 } catch (e:Dynamic) return VVoid;
             },
             "write" => (args, ctx) -> {
                 if (args.length < 2) return VVoid;
+                var path = "";
+                var content = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.write")]);
+                }
+                switch (args[1]) {
+                    case VString(s): content = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.write")]);
+                }
                 try {
-                    sys.io.File.saveContent(valToString(args[0]), valToString(args[1]));
-                    return VNumber(1.0);
-                } catch (e:Dynamic) return VVoid;
-            },
-            "append" => (args, ctx) -> {
-                if (args.length < 2) return VVoid;
-                try {
-                    var o = sys.io.File.append(valToString(args[0]));
-                    o.writeString(valToString(args[1]));
-                    o.close();
-                    return VNumber(1.0);
-                } catch (e:Dynamic) return VVoid;
-            },
-            "copy" => (args, ctx) -> {
-                if (args.length < 2) return VVoid;
-                try {
-                    sys.io.File.copy(valToString(args[0]), valToString(args[1]));
-                    return VNumber(1.0);
-                } catch (e:Dynamic) return VVoid;
-            },
-            "move" => (args, ctx) -> {
-                if (args.length < 2) return VVoid;
-                try {
-                    sys.FileSystem.rename(valToString(args[0]), valToString(args[1]));
+                    sys.io.File.saveContent(path, content);
                     return VNumber(1.0);
                 } catch (e:Dynamic) return VVoid;
             },
             "deleteFile" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
+                var path = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.deleteFile")]);
+                }
                 try {
-                    sys.FileSystem.deleteFile(valToString(args[0]));
+                    sys.FileSystem.deleteFile(path);
                     return VNumber(1.0);
-                } catch (e:Dynamic) return VVoid;
-            },
-            "deleteDir" => (args, ctx) -> {
-                if (args.length == 0) return VVoid;
-                try {
-                    sys.FileSystem.deleteDirectory(valToString(args[0]));
-                    return VNumber(1.0);
-                } catch (e:Dynamic) return VVoid;
-            },
-            "mkdir" => (args, ctx) -> {
-                if (args.length == 0) return VVoid;
-                try {
-                    sys.FileSystem.createDirectory(valToString(args[0]));
-                    return VNumber(1.0);
-                } catch (e:Dynamic) return VVoid;
-            },
-            "list" => (args, ctx) -> {
-                var path = args.length > 0 ? valToString(args[0]) : ".";
-                try {
-                    return VArray(sys.FileSystem.readDirectory(path).map(s -> VString(s)));
                 } catch (e:Dynamic) return VVoid;
             },
             "stat" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
+                var path = "";
+                switch (args[0]) {
+                    case VString(s): path = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("fs.stat")]);
+                }
                 try {
-                    var s = sys.FileSystem.stat(valToString(args[0]));
+                    var s = sys.FileSystem.stat(path);
                     var map = new Map<String, Value>();
                     map.set("size", VNumber(s.size));
-                    map.set("isDir", sys.FileSystem.isDirectory(valToString(args[0])) ? VNumber(1.0) : VVoid);
+                    map.set("isDir", sys.FileSystem.isDirectory(path) ? VNumber(1.0) : VVoid);
                     map.set("mtime", VNumber(s.mtime.getTime()));
                     return VObject(map);
                 } catch (e:Dynamic) return VVoid;
@@ -143,7 +148,11 @@ class SysExtension implements IExtension {
         mods.set("proc", [
             "run" => (args, ctx) -> {
                 if (args.length == 0) return VVoid;
-                var cmd = valToString(args[0]);
+                var cmd = "";
+                switch (args[0]) {
+                    case VString(s): cmd = s;
+                    case other: return VError(4007, [VString("String"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("proc.run")]);
+                }
                 var cmdArgs:Array<String> = [];
                 if (args.length > 1) switch (args[1]) {
                     case VArray(a): cmdArgs = a.map(valToString);
