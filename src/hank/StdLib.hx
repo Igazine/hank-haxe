@@ -286,6 +286,20 @@ class StdLib implements IExtension {
             }
             if (b == 0) VVoid else VNumber(a / b);
         });
+        tasks.set("math_mod", (args, ctx) -> {
+            if (args.length < 2) return VVoid;
+            var a = 0.0;
+            var b = 0.0;
+            switch (args[0]) {
+                case VNumber(n): a = n;
+                case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math_mod")]);
+            }
+            switch (args[1]) {
+                case VNumber(n): b = n;
+                case other: return VError(4007, [VString("Number"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("math_mod")]);
+            }
+            if (b == 0) VVoid else VNumber(a % b);
+        });
         tasks.set("math_gt", (args, ctx) -> {
             if (args.length < 2) return VVoid;
             var a = 0.0;
