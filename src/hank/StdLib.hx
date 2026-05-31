@@ -5,8 +5,11 @@ import haxe.Json;
 
 class StdLib implements IExtension {
     public var name(default, null):String = "StdLib";
+    public var envState:Map<String, Value>;
 
-    public function new() {}
+    public function new() {
+        envState = new Map<String, Value>();
+    }
 
     /**
      * Returns the recommended standard library tasks.
@@ -144,9 +147,21 @@ class StdLib implements IExtension {
         tasks.set("loop_break", (args, ctx) -> VOpaque("__ControlFlow", "Break"));
 
         // env
-        tasks.set("env_get", (args, ctx) -> VVoid);
-        tasks.set("env_set", (args, ctx) -> VVoid);
-        tasks.set("env_keys", (args, ctx) -> VArray([]));
+        tasks.set("env_get", (args, ctx) -> {
+            if (args.length == 0) return VVoid;
+            var key = valToString(args[0]);
+            return envState.exists(key) ? envState.get(key) : VVoid;
+        });
+        tasks.set("env_set", (args, ctx) -> {
+            if (args.length < 2) return VVoid;
+            var key = valToString(args[0]);
+            envState.set(key, args[1]);
+            return VVoid;
+        });
+        tasks.set("env_keys", (args, ctx) -> {
+            var keys = [for (k in envState.keys()) VString(k)];
+            return VArray(keys);
+        });
 
         // str
         tasks.set("str_length", (args, ctx) -> {
