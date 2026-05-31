@@ -114,6 +114,7 @@ class Main {
             "test/conformance/17_num_module.hank",
             "test/conformance/18_runtime_module.hank",
             "test/conformance/19_error_handling.hank",
+            "test/conformance/20_grammar_hardening.hank",
         ];
 
         for (t in tests) {
