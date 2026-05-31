@@ -328,7 +328,16 @@ class StdLib implements IExtension {
             VVoid;
         });
         tasks.set("logic_eq", (args, ctx) -> (args.length < 2) ? VVoid : (hankEquals(args[0], args[1]) ? VNumber(1.0) : VVoid));
-        tasks.set("logic_isVoid", (args, ctx) -> (args.length > 0 && args[0] == VVoid) ? VNumber(1.0) : VVoid);
+
+        // type
+        tasks.set("type_isVoid", (args, ctx) -> (args.length > 0 && args[0] == VVoid) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isNumber", (args, ctx) -> (args.length > 0 && args[0].match(VNumber(_))) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isString", (args, ctx) -> (args.length > 0 && args[0].match(VString(_))) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isArray", (args, ctx) -> (args.length > 0 && args[0].match(VArray(_))) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isMap", (args, ctx) -> (args.length > 0 && args[0].match(VMap(_))) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isOpaque", (args, ctx) -> (args.length > 0 && args[0].match(VOpaque(_, _))) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isTask", (args, ctx) -> (args.length > 0 && args[0].match(VTask(_))) ? VNumber(1.0) : VVoid);
+        tasks.set("type_isError", (args, ctx) -> (args.length > 0 && args[0].match(VError(_, _))) ? VNumber(1.0) : VVoid);
 
         // arr
         tasks.set("arr_length", (args, ctx) -> {
@@ -590,15 +599,29 @@ class StdLib implements IExtension {
         tasks.set("err_args", (args, ctx) -> {
             if (args.length == 0) return VVoid;
             return switch (args[0]) {
-                case VError(_, args): VArray(args);
+                case VError(c, a): VArray(a);
                 case other: VError(4007, [VString("Error"), VString(ValueTools.typeToString(ValueTools.getType(other))), VString("err_args")]);
             }
         });
-        tasks.set("err_isError", (args, ctx) -> {
+
+        // regex
+        tasks.set("regex_parse", (args, ctx) -> {
             if (args.length == 0) return VVoid;
-            return switch (args[0]) {
-                case VError(_, _): VNumber(1.0);
-                default: VVoid;
+            var pattern = valToString(args[0]);
+            var flags = args.length > 1 ? valToString(args[1]) : "";
+            try {
+                return VOpaque("RegExp", new EReg(pattern, flags));
+            } catch (e:Dynamic) return VVoid;
+        });
+        tasks.set("regex_match", (args, ctx) -> {
+            if (args.length < 2) return VVoid;
+            var s = valToString(args[0]);
+            return switch (args[1]) {
+                case VOpaque("RegExp", re):
+                    var ereg:EReg = cast re;
+                    ereg.match(s) ? VNumber(1.0) : VVoid;
+                default:
+                    StringTools.contains(s, valToString(args[1])) ? VNumber(1.0) : VVoid;
             }
         });
 
